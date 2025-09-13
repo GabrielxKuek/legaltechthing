@@ -6,6 +6,7 @@ import ChatInput from '../components/ChatInput';
 
 export default function ChatPage() {
   const navigate = useNavigate();
+  const [devMode, setDevMode] = useState(false);
   const [messages, setMessages] = useState([
     {
       id: 1,
@@ -35,8 +36,12 @@ export default function ChatPage() {
     setIsTyping(true);
 
     try {
-        // Call your local Flask endpoint
-        const response = await fetch("http://localhost:8080/query", {
+        // Use different endpoint based on dev mode
+        const endpoint = devMode 
+          ? "http://localhost:8080/query"
+          : "http://localhost:8080/openai/query";
+
+        const response = await fetch(endpoint, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ question: message, use_webscraping: false }) // default no webscraping
@@ -96,6 +101,32 @@ export default function ChatPage() {
             </div>
           </div>
           <div className="flex items-center gap-6">
+            {/* Dev Mode Switch */}
+            <div className="flex items-center gap-3">
+                <span className="text-sm font-medium text-gray-700">Dev Mode</span>
+                <button
+                    onClick={() => setDevMode(!devMode)}
+                    className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors duration-200 focus:outline-none ${
+                    devMode ? 'bg-green-500' : 'bg-gray-400'
+                    }`}
+                    style={{
+                    backgroundColor: devMode ? '#10b981' : '#9ca3af',
+                    border: 'none',
+                    outline: 'none'
+                    }}
+                >
+                    <span
+                    className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform duration-200 shadow-sm ${
+                        devMode ? 'translate-x-6' : 'translate-x-1'
+                    }`}
+                    style={{
+                        backgroundColor: '#ffffff',
+                        boxShadow: '0 1px 3px 0 rgba(0, 0, 0, 0.1), 0 1px 2px 0 rgba(0, 0, 0, 0.06)'
+                    }}
+                    />
+                </button>
+            </div>
+            
             <button
               onClick={() => navigate('/practice')}
               className="bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors font-medium shadow-sm border border-green-700"

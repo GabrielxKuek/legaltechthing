@@ -5,7 +5,8 @@ import requests
 from dotenv import load_dotenv
 import os
 from flask_cors import CORS
-
+from handle_rag import ArbitrationRAGChroma
+import logging
 
 # ----------------------------
 # load fine tuned model
@@ -25,6 +26,8 @@ model.eval()
 # config
 # ----------------------------
 load_dotenv()
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
 
 TAVILY_API_URL = "https://api.tavily.com/search"
 TAVILY_API_KEY = os.getenv("TAVILY_API_KEY")
@@ -108,10 +111,191 @@ def tavily_test(query_text):
         return {"error": str(e)}
 
 # ----------------------------
+# Initialize ChromaDB RAG System
+# ----------------------------
+rag_system = None
+
+def initialize_rag():
+    """Initialize the RAG system once at startup"""
+    global rag_system
+    try:
+        rag_system = ArbitrationRAGChroma()
+        logger.info("ChromaDB RAG system initialized successfully")
+        logger.info(f"Cases loaded: {rag_system.collection.count()}")
+        return True
+    except Exception as e:
+        logger.error(f"Failed to initialize RAG system: {str(e)}")
+        return False
+
+# ----------------------------
 # flask
 # ----------------------------
 app = Flask(__name__)
 CORS(app)
+
+# ----------------------------
+# ChromaDB RAG endpoint
+# ----------------------------
+@app.route("/openai/query", methods=["POST"])
+def openai_rag_query():
+    """
+    Query arbitration cases using ChromaDB RAG system
+    
+    Expected JSON body:
+    {
+        "question": "What is case IDS-817 about?",
+        "model": "gpt-3.5-turbo" (optional, defaults to gpt-3.5-turbo)
+    }
+    """
+    try:
+        # Check if RAG system is initialized
+        if rag_system is None:
+            return jsonify({
+                "error": "RAG system not initialized",
+                "message": "ChromaDB RAG system failed to load. Check server logs."
+            }), 500
+        
+        # Parse request JSON
+        if not request.is_json:
+            return jsonify({
+                "error": "Invalid request format",
+                "message": "Request must be JSON"
+            }), 400
+        
+        data = request.get_json()
+        
+        # Validate required fields
+        if 'question' not in data:
+            return jsonify({
+                "error": "Missing required field",
+                "message": "Field 'question' is required"
+            }), 400
+        
+        question = data['question'].strip()
+        if not question:
+            return jsonify({
+                "error": "Invalid question",
+                "message": "Question cannot be empty"
+            }), 400
+        
+        # Get optional model parameter (default to gpt-3.5-turbo)
+        model_name = data.get('model', 'gpt-3.5-turbo')
+        
+        logger.info(f"🔍 RAG Query: {question}")
+        
+        # Use the RAG system to answer the question
+        answer = rag_system.answer_question(question, model=model_name)
+        
+        # Get the relevant cases that were found
+        relevant_cases = rag_system.search_cases(question, n_results=3)
+        
+        # Format response with case information
+        sources = []
+        for case in relevant_cases:
+            meta = case['metadata']
+            sources.append({
+                "case_id": meta.get('case_id'),
+                "title": meta.get('title'),
+                "institution": meta.get('institution'),
+                "status": meta.get('status'),
+                "similarity": f"{1-case['distance']:.3f}" if case['distance'] else "N/A"
+            })
+        
+        response_data = {
+            "question": question,
+            "answer": answer,
+            "model_used": model_name,
+            "sources": sources,
+            "total_cases_in_db": rag_system.collection.count()
+        }
+        
+        logger.info(f"✅ RAG Response generated with {len(sources)} sources")
+        return jsonify(response_data)
+        
+    except Exception as e:
+        logger.error(f"Error in RAG query: {str(e)}")
+        return jsonify({
+            "error": "Internal server error",
+            "message": str(e)
+        }), 500
+
+# ----------------------------
+# Load cases endpoint
+# ----------------------------
+@app.route("/openai/load-cases", methods=["POST"])
+def load_cases():
+    """
+    Load arbitration cases from JSON file into ChromaDB
+    
+    Expected JSON body:
+    {
+        "filename": "path/to/your/cases.json"
+    }
+    """
+    try:
+        if rag_system is None:
+            return jsonify({
+                "error": "RAG system not initialized"
+            }), 500
+        
+        data = request.get_json()
+        if not data or 'filename' not in data:
+            return jsonify({
+                "error": "Missing filename parameter"
+            }), 400
+        
+        filename = data['filename']
+        
+        # Check if file exists
+        if not os.path.exists(filename):
+            return jsonify({
+                "error": f"File not found: {filename}"
+            }), 404
+        
+        # Load cases
+        initial_count = rag_system.collection.count()
+        rag_system.load_cases_from_json(filename)
+        final_count = rag_system.collection.count()
+        cases_added = final_count - initial_count
+        
+        return jsonify({
+            "message": f"Successfully loaded {cases_added} cases",
+            "total_cases": final_count,
+            "filename": filename
+        })
+        
+    except Exception as e:
+        logger.error(f"Error loading cases: {str(e)}")
+        return jsonify({
+            "error": "Failed to load cases",
+            "message": str(e)
+        }), 500
+
+# ----------------------------
+# Get database stats endpoint
+# ----------------------------
+@app.route("/openai/stats", methods=["GET"])
+def get_rag_stats():
+    """Get ChromaDB database statistics"""
+    try:
+        if rag_system is None:
+            return jsonify({
+                "error": "RAG system not initialized"
+            }), 500
+        
+        stats = rag_system.get_database_stats()
+        
+        return jsonify({
+            "stats": stats,
+            "total_cases": rag_system.collection.count()
+        })
+        
+    except Exception as e:
+        logger.error(f"Error getting stats: {str(e)}")
+        return jsonify({
+            "error": "Failed to get stats",
+            "message": str(e)
+        }), 500
 
 # ----------------------------
 # /query endpoint
@@ -177,4 +361,8 @@ def tavily_test_endpoint():
 # Run server
 # ----------------------------
 if __name__ == "__main__":
+    logger.info("Starting Flask app...")
+    logger.info("Initializing ChromaDB RAG system...")
+    initialize_rag()
+
     app.run(host="0.0.0.0", port=8080, debug=True)

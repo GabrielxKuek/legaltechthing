@@ -17,6 +17,7 @@ export default function PracticePage() {
   const [showScoreModal, setShowScoreModal] = useState(false);
   const [scoreData, setScoreData] = useState(null);
   const [isLoadingScore, setIsLoadingScore] = useState(false);
+  const [showObjection, setShowObjection] = useState(false);
   
   const textTimeoutRef = useRef(null);
   const mediaRecorderRef = useRef(null);
@@ -30,7 +31,7 @@ export default function PracticePage() {
   // Edgeworth sprite frames (15-22)
   const edgeworthFrames = Array.from({length: 8}, (_, i) => `/edgeworth/bu_chr00_06_a-${i + 15}.png`);
 
-  const edgeworthDialogue = "Miles Edgeworth, prosecutor. Hmph. I hope you're prepared, because these cases won't be easy. You'll need to think like a lawyer, analyze evidence carefully, and present compelling arguments. The pursuit of truth requires nothing less than perfection.";
+  const edgeworthDialogue = "...";
 
   // Cleanup on component unmount
   useEffect(() => {
@@ -93,6 +94,21 @@ export default function PracticePage() {
       }
     };
     typeChar();
+  };
+
+  const triggerObjection = () => {
+    setShowObjection(true);
+
+    // Play objection audio
+    const objectionAudio = new Audio('/objection-audio.flac');
+    objectionAudio.volume = 0.6;
+    objectionAudio.play().catch(() => {});
+
+    // Hide after 1s
+    setTimeout(() => {
+        setShowObjection(false);
+        setCurrentCharacter("edgeworth"); // switch after effect
+    }, 1000);
   };
 
   const startRecording = async () => {
@@ -294,13 +310,18 @@ export default function PracticePage() {
         const data = await response.json();
         const reply = data.choices[0].message.content.trim();
 
-        setCurrentCharacter("edgeworth");
-        typeText(reply);
+        setTimeout(() => {
+            triggerObjection();
+            typeText(reply);
+        }, 1000);
 
     } catch (err) {
         console.error(err);
-        setCurrentCharacter("edgeworth");
-        typeText("Hmph. It seems your words falter before the weight of evidence.");
+        
+        setTimeout(() => {
+            triggerObjection();
+            typeText("Hmph. It seems your words falter before the weight of evidence.");
+        }, 1000);
     }
   };
 
@@ -506,6 +527,18 @@ export default function PracticePage() {
           </div>
         )}
       </div>
+
+      {/* Objection Overlay */}
+      {showObjection && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center backdrop-blur-sm bg-black/40">
+            <img
+            src="/objection.png"
+            alt="Objection!"
+            className="w-[900px] h-auto"
+            style={{ imageRendering: 'pixelated' }}
+            />
+        </div>
+      )}
 
       {/* Feedback Modal */}
       {showScoreModal && (
