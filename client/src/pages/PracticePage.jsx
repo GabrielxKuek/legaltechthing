@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { ArrowLeft, Volume2, VolumeX, Mic, MicOff, AlertCircle } from 'lucide-react';
+import { ArrowLeft, Volume2, VolumeX, Mic, MicOff, AlertCircle, Award, X, RotateCcw } from 'lucide-react';
 
 export default function PracticePage() {
   const [currentCharacter, setCurrentCharacter] = useState('phoenix');
@@ -14,6 +14,9 @@ export default function PracticePage() {
   const [isRecording, setIsRecording] = useState(false);
   const [isProcessing, setIsProcessing] = useState(false);
   const [phoenixSpeech, setPhoenixSpeech] = useState('');
+  const [showScoreModal, setShowScoreModal] = useState(false);
+  const [scoreData, setScoreData] = useState(null);
+  const [isLoadingScore, setIsLoadingScore] = useState(false);
   
   const textTimeoutRef = useRef(null);
   const mediaRecorderRef = useRef(null);
@@ -172,8 +175,11 @@ export default function PracticePage() {
       if (transcription.trim()) {
         setPhoenixSpeech(transcription);
         typeText(transcription);
-      } else {
-        setCurrentText("I didn't catch that. Please try speaking again.");
+
+        // after Phoenix is done, trigger Edgeworth's OpenAI reply
+        setTimeout(() => {
+            getEdgeworthResponse(transcription);
+        }, 2000);
       }
       
     } catch (error) {
@@ -248,6 +254,171 @@ export default function PracticePage() {
         cursor: 'not-allowed'
       };
     }
+  };
+
+  const getEdgeworthResponse = async (userInput) => {
+    try {
+        const response = await fetch("https://api.openai.com/v1/chat/completions", {
+        method: "POST",
+        headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${apiKey}`,
+        },
+        body: JSON.stringify({
+            model: "gpt-4o-mini", // or "gpt-4o"
+            messages: [
+            {
+                role: "system",
+                content: `You are Miles Edgeworth, a sharp and antagonistic prosecutor. 
+                Respond like a rival lawyer in a courtroom duel.
+                
+                Legal Context:
+                Fenoscadia Limited is in arbitration against Kronos. Kronos revoked their license citing environmental harm.
+                Kronos is now filing an environmental counterclaim (contamination of Rhea River, health impacts, cleanup costs).
+                Your role: challenge Phoenix Wright's arguments aggressively, exposing weaknesses and pressing the tribunal to favor Kronos.`,
+            },
+            {
+                role: "user",
+                content: userInput,
+            },
+            ],
+            temperature: 0.7,
+            max_tokens: 400,
+        }),
+        });
+
+        if (!response.ok) {
+        throw new Error("Failed to fetch Edgeworth's response.");
+        }
+
+        const data = await response.json();
+        const reply = data.choices[0].message.content.trim();
+
+        setCurrentCharacter("edgeworth");
+        typeText(reply);
+
+    } catch (err) {
+        console.error(err);
+        setCurrentCharacter("edgeworth");
+        typeText("Hmph. It seems your words falter before the weight of evidence.");
+    }
+  };
+
+  const getArgumentScore = async () => {
+    if (!apiKey || !phoenixSpeech) {
+        return;
+    }
+
+    setIsLoadingScore(true);
+    
+    try {
+        const response = await fetch("https://api.openai.com/v1/chat/completions", {
+            method: "POST",
+            headers: {
+                "Content-Type": "application/json",
+                Authorization: `Bearer ${apiKey}`,
+            },
+            body: JSON.stringify({
+                model: "gpt-4o-mini",
+                messages: [
+                    {
+                        role: "system",
+                        content: `You are an expert legal coach analyzing courtroom arguments. 
+                        
+                        Legal Context: Fenoscadia Limited vs. Kronos arbitration case. Kronos revoked Fenoscadia's license citing environmental harm. Kronos filed environmental counterclaim for Rhea River contamination, health impacts, and cleanup costs.
+                        
+                        Evaluate the user's argument and provide:
+                        1. A score out of 100
+                        2. Specific strengths (2-3 points)
+                        3. Areas for improvement (2-3 points)
+                        4. Concrete suggestions for stronger legal arguments
+                        5. Specific legal points they could bring up next time
+                        
+                        Format your response as JSON:
+                        {
+                          "score": 75,
+                          "strengths": ["Point 1", "Point 2"],
+                          "improvements": ["Area 1", "Area 2"],
+                          "suggestions": ["Suggestion 1", "Suggestion 2"],
+                          "legalPoints": ["Legal point 1", "Legal point 2"]
+                        }`,
+                    },
+                    {
+                        role: "user",
+                        content: `Please analyze this legal argument: "${phoenixSpeech}"`,
+                    },
+                ],
+                temperature: 0.3,
+                max_tokens: 800,
+            }),
+        });
+
+        if (!response.ok) {
+            throw new Error("Failed to get argument analysis.");
+        }
+
+        const data = await response.json();
+        const analysisText = data.choices[0].message.content.trim();
+        
+        try {
+            const scoreData = JSON.parse(analysisText);
+            setScoreData(scoreData);
+        } catch (parseError) {
+            // Fallback if JSON parsing fails
+            setScoreData({
+                score: 70,
+                strengths: ["Your argument was clearly articulated"],
+                improvements: ["Could use more specific legal precedents"],
+                suggestions: ["Research case law related to environmental licensing"],
+                legalPoints: ["Consider citing environmental protection statutes", "Reference precedent cases on license revocation"]
+            });
+        }
+
+    } catch (error) {
+        console.error('Score analysis error:', error);
+        setScoreData({
+            score: 65,
+            strengths: ["Argument was presented"],
+            improvements: ["Analysis unavailable due to technical error"],
+            suggestions: ["Try again later"],
+            legalPoints: ["Technical error prevented analysis"]
+        });
+    } finally {
+        setIsLoadingScore(false);
+    }
+  };
+
+  const handleShowFeedback = async () => {
+    setShowScoreModal(true);
+    await getArgumentScore();
+  };
+
+  const handleRetry = () => {
+    setShowScoreModal(false);
+    setIsTransitioning(true);
+    setShowContinueButton(false);
+
+    setTimeout(() => {
+      setCurrentCharacter('phoenix');
+      setPhoenixSpeech('');
+      setCurrentText('');
+      setScoreData(null);
+      setIsTransitioning(false);
+    }, 500);
+  };
+
+  const getScoreColor = (score) => {
+    if (score >= 80) return 'text-green-600';
+    if (score >= 60) return 'text-yellow-600';
+    return 'text-red-600';
+  };
+
+  const getScoreGrade = (score) => {
+    if (score >= 90) return 'A';
+    if (score >= 80) return 'B';
+    if (score >= 70) return 'C';
+    if (score >= 60) return 'D';
+    return 'F';
   };
 
   const handleGoHome = () => alert('Navigation to home page would happen here');
@@ -336,6 +507,140 @@ export default function PracticePage() {
         )}
       </div>
 
+      {/* Feedback Modal */}
+      {showScoreModal && (
+        <div className="fixed inset-0 flex items-center justify-center z-50" style={{ backdropFilter: 'blur(8px)' }}>
+          <div className="bg-white border-4 border-blue-900 max-w-3xl mx-4 max-h-[90vh] overflow-y-auto shadow-2xl">
+            {/* Header */}
+            <div className="bg-blue-900 border-b-4 border-yellow-400 p-6">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-3">
+                  <Award className="text-yellow-400" size={32} />
+                  <h2 className="text-2xl font-bold text-yellow-400" style={{ fontFamily: 'serif' }}>
+                    ARGUMENT ANALYSIS
+                  </h2>
+                </div>
+                <button
+                  onClick={() => setShowScoreModal(false)}
+                  className="text-yellow-400 hover:text-yellow-300 p-2"
+                >
+                  <X size={24} />
+                </button>
+              </div>
+            </div>
+
+            {/* Content */}
+            <div className="p-8">
+              {isLoadingScore ? (
+                <div className="text-center py-12">
+                  <div className="animate-spin rounded-full h-12 w-12 border-4 border-blue-200 border-t-blue-900 mx-auto mb-4"></div>
+                  <p className="text-blue-900 text-lg font-bold">Analyzing your argument...</p>
+                </div>
+              ) : scoreData ? (
+                <div className="space-y-8">
+                  {/* Score */}
+                  <div className="text-center bg-blue-50 border-4 border-blue-900 p-8">
+                    <div className="text-blue-900 text-lg font-bold mb-3">FINAL SCORE</div>
+                    <div className={`text-6xl font-bold ${getScoreColor(scoreData.score)} mb-2`}>
+                      {scoreData.score}
+                    </div>
+                    <div className="text-xl text-blue-900">
+                      Grade: <span className={`font-bold ${getScoreColor(scoreData.score)}`}>
+                        {getScoreGrade(scoreData.score)}
+                      </span>
+                    </div>
+                  </div>
+
+                  {/* Sections */}
+                  <div className="space-y-6">
+                    {/* Strengths */}
+                    <div className="border-4 border-blue-900 bg-white">
+                      <div className="bg-blue-900 text-yellow-400 p-4 border-b-4 border-yellow-400">
+                        <h3 className="text-lg font-bold">! STRENGTHS</h3>
+                      </div>
+                      <div className="p-6 space-y-3">
+                        {scoreData.strengths.map((strength, index) => (
+                          <div key={index} className="text-blue-900">
+                            • {strength}
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+
+                    {/* Areas for Improvement */}
+                    <div className="border-4 border-blue-900 bg-white">
+                      <div className="bg-blue-900 text-yellow-400 p-4 border-b-4 border-yellow-400">
+                        <h3 className="text-lg font-bold">! AREAS FOR IMPROVEMENT</h3>
+                      </div>
+                      <div className="p-6 space-y-3">
+                        {scoreData.improvements.map((improvement, index) => (
+                          <div key={index} className="text-blue-900">
+                            • {improvement}
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+
+                    {/* Suggestions */}
+                    <div className="border-4 border-blue-900 bg-white">
+                      <div className="bg-blue-900 text-yellow-400 p-4 border-b-4 border-yellow-400">
+                        <h3 className="text-lg font-bold">! SUGGESTIONS</h3>
+                      </div>
+                      <div className="p-6 space-y-3">
+                        {scoreData.suggestions.map((suggestion, index) => (
+                          <div key={index} className="text-blue-900">
+                            • {suggestion}
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+
+                    {/* Legal Points */}
+                    {scoreData.legalPoints && (
+                      <div className="border-4 border-blue-900 bg-white">
+                        <div className="bg-blue-900 text-yellow-400 p-4 border-b-4 border-yellow-400">
+                          <h3 className="text-lg font-bold">! LEGAL POINTS TO CONSIDER</h3>
+                        </div>
+                        <div className="p-6 space-y-3">
+                          {scoreData.legalPoints.map((point, index) => (
+                            <div key={index} className="text-blue-900">
+                              • {point}
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Action buttons */}
+                  <div className="flex gap-4 justify-center pt-6 border-t-4 border-blue-200">
+                    <button
+                      onClick={handleRetry}
+                      className="px-6 py-3 bg-yellow-400 hover:bg-yellow-500 text-blue-900 border-2 border-yellow-300 font-bold transition-colors flex items-center gap-2"
+                    >
+                      <RotateCcw size={20} />
+                      TRY AGAIN
+                    </button>
+                  </div>
+                </div>
+              ) : (
+                <div className="text-center py-12">
+                  <AlertCircle className="text-blue-900 mx-auto mb-4" size={48} />
+                  <p className="text-blue-900 text-lg font-bold mb-4">No argument to analyze yet.</p>
+                  <p className="text-blue-700 mb-6">Make an argument first, then return for feedback.</p>
+                  <button
+                    onClick={() => setShowScoreModal(false)}
+                    className="px-6 py-3 bg-blue-900 hover:bg-blue-800 text-yellow-400 border-2 border-blue-700 font-bold transition-colors"
+                  >
+                    UNDERSTOOD
+                  </button>
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Text box at bottom */}
       <div className="relative z-20 bg-gradient-to-r from-blue-900 to-blue-800 border-t-4 border-yellow-400 p-6">
         <div className="bg-white rounded-lg border-4 border-blue-900 p-6 relative">
@@ -391,15 +696,26 @@ export default function PracticePage() {
             </div>
           )}
 
-          {/* Continue button */}
+          {/* Continue/Feedback button */}
           <div className="absolute bottom-4 right-6">
             {showContinueButton && !isProcessing && (
-              <button
-                onClick={handleContinue}
-                className="bg-yellow-400 hover:bg-yellow-500 text-blue-900 px-6 py-3 rounded-lg font-bold border-2 border-blue-900 transition-all transform hover:scale-105"
-              >
-                {currentCharacter === 'edgeworth' ? '◀ BACK' : '▶ CONTINUE'}
-              </button>
+              <>
+                {currentCharacter === 'phoenix' ? (
+                  <button
+                    onClick={handleContinue}
+                    className="bg-yellow-400 hover:bg-yellow-500 text-blue-900 px-6 py-3 rounded-lg font-bold border-2 border-blue-900 transition-all transform hover:scale-105"
+                  >
+                    ▶ CONTINUE
+                  </button>
+                ) : (
+                  <button
+                    onClick={handleShowFeedback}
+                    className="bg-yellow-400 hover:bg-yellow-500 text-blue-900 px-6 py-3 rounded-lg font-bold border-2 border-blue-900 transition-all transform hover:scale-105"
+                  >
+                    ▶ GET FEEDBACK
+                  </button>
+                )}
+              </>
             )}
           </div>
         </div>

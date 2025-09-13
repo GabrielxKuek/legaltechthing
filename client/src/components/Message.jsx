@@ -2,6 +2,32 @@ import React from 'react';
 import { Bot, User } from 'lucide-react';
 
 export default function Message({ message, isBot }) {
+  // Handle both string and object content
+  const renderContent = () => {
+    if (typeof message.content === 'string') {
+      return message.content;
+    } else if (typeof message.content === 'object' && message.content !== null) {
+      // Handle object content with institution and topics
+      return (
+        <div className="space-y-2">
+          {message.content.institution && (
+            <div>
+              <span className="font-semibold">Institution: </span>
+              {message.content.institution}
+            </div>
+          )}
+          {message.content.topics && (
+            <div>
+              <span className="font-semibold">Topics: </span>
+              {message.content.topics}
+            </div>
+          )}
+        </div>
+      );
+    }
+    return 'Invalid message content';
+  };
+
   return (
     <div className={`flex gap-4 mb-6 ${isBot ? 'justify-start' : 'justify-end'}`}>
       {isBot && (
@@ -17,7 +43,7 @@ export default function Message({ message, isBot }) {
             : 'bg-blue-600 text-white'
         }`}>
           <div className="text-base leading-relaxed">
-            {message.content}
+            {renderContent()}
           </div>
         </div>
       </div>
