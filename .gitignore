@@ -4,3 +4,4 @@ arbitration_fine_tuning.jsonl
 .env
 .env.local
 model/*
+chroma_db/*

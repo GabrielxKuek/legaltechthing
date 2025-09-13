@@ -178,10 +178,10 @@ def openai_rag_query():
                 "message": "Question cannot be empty"
             }), 400
         
-        # Get optional model parameter (default to gpt-3.5-turbo)
-        model_name = data.get('model', 'gpt-3.5-turbo')
+        # Get optional model parameter
+        model_name = data.get('model', 'ft:gpt-4o-mini-2024-07-18:personal::CFU019NU')
         
-        logger.info(f"🔍 RAG Query: {question}")
+        logger.info(f"RAG Query: {question}")
         
         # Use the RAG system to answer the question
         answer = rag_system.answer_question(question, model=model_name)

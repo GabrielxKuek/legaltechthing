@@ -1,12 +1,14 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Bot } from 'lucide-react';
+import { Bot, FileText } from 'lucide-react';
 import Message from '../components/Message';
 import ChatInput from '../components/ChatInput';
+import ClosingStatementModal from '../components/ClosingStatementModal'; // Add this import
 
 export default function ChatPage() {
   const navigate = useNavigate();
   const [devMode, setDevMode] = useState(false);
+  const [showClosingModal, setShowClosingModal] = useState(false); // Add this state
   const [messages, setMessages] = useState([
     {
       id: 1,
@@ -126,6 +128,26 @@ export default function ChatPage() {
                     />
                 </button>
             </div>
+
+            {/* Add Closing Statement Button */}
+            <button
+              onClick={() => setShowClosingModal(true)}
+              className="bg-purple-600 text-white rounded-lg hover:bg-purple-700 transition-colors font-medium shadow-sm border border-purple-700"
+              style={{ 
+                backgroundColor: '#7c3aed', 
+                color: '#ffffff',
+                padding: '10px 24px',
+                border: '1px solid #6d28d9',
+                borderRadius: '8px',
+                fontWeight: '500',
+                cursor: 'pointer'
+              }}
+            >
+              <div className="flex items-center gap-2">
+                <FileText className="w-4 h-4" />
+                Closing Statement
+              </div>
+            </button>
             
             <button
               onClick={() => navigate('/practice')}
@@ -174,6 +196,13 @@ export default function ChatPage() {
 
       {/* Chat Input */}
       <ChatInput onSendMessage={handleSendMessage} />
+
+      {/* Closing Statement Modal */}
+      <ClosingStatementModal 
+        isOpen={showClosingModal}
+        onClose={() => setShowClosingModal(false)}
+        chatMessages={messages}
+      />
     </div>
   );
 }
