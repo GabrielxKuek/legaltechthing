@@ -565,9 +565,13 @@ export default function PracticePage() {
             {/* Content */}
             <div className="p-8">
               {isLoadingScore ? (
-                <div className="text-center py-12">
-                  <div className="animate-spin rounded-full h-12 w-12 border-4 border-blue-200 border-t-blue-900 mx-auto mb-4"></div>
-                  <p className="text-blue-900 text-lg font-bold">Analyzing your argument...</p>
+                <div className="flex flex-col items-center justify-center mt-4">
+                    <img
+                        src="/judge-gavel.gif"
+                        alt="Judge deciding"
+                        className="w-32 h-32"
+                    />
+                    <p className="text-gray-700 font-semibold">Judge is deciding...</p>
                 </div>
               ) : scoreData ? (
                 <div className="space-y-8">
