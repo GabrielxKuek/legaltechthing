@@ -134,7 +134,7 @@ export default function PracticePage() {
         
     } catch (error) {
         console.error('Error starting recording:', error);
-        setCurrentText('❌ Error accessing microphone. Please check permissions.');
+        setCurrentText('Error accessing microphone. Please check permissions.');
     }
   };
 
@@ -178,7 +178,7 @@ export default function PracticePage() {
       
     } catch (error) {
       console.error('Transcription error:', error);
-      setCurrentText(`❌ Error: ${error.message}`);
+      setCurrentText(`Error: ${error.message}`);
     } finally {
       setIsProcessing(false);
     }

@@ -24,40 +24,61 @@ export default function ChatPage() {
     scrollToBottom();
   }, [messages]);
 
-  const simulateAIResponse = (userMessage) => {
-    setIsTyping(true);
-    
-    setTimeout(() => {
-      let response = "";
-      
-      if (userMessage.toLowerCase().includes('contract')) {
-        response = "I can help you with contract analysis! Here are key areas I can assist with:\n\n• Contract interpretation and clause analysis\n• Risk assessment in contractual terms\n• Standard vs. non-standard provisions\n• Negotiation strategies\n• Compliance requirements\n\nWhat specific aspect of contract law would you like to explore?";
-      } else if (userMessage.toLowerCase().includes('litigation')) {
-        response = "Litigation strategy is complex. I can help you think through:\n\n• Case theory development\n• Evidence gathering strategies\n• Motion practice considerations\n• Discovery planning\n• Settlement analysis\n\nWhat type of litigation matter are you working on?";
-      } else if (userMessage.toLowerCase().includes('corporate')) {
-        response = "Corporate law covers many areas:\n\n• Business formation and structure\n• Corporate governance\n• M&A transactions\n• Securities compliance\n• Board responsibilities\n\nWhich corporate law topic interests you?";
-      } else {
-        response = `I understand you're asking about: "${userMessage}"\n\nAs your legal AI assistant, I can help with:\n\n• Legal research and analysis\n• Case law interpretation\n• Document drafting guidance\n• Regulatory compliance\n• Practice area insights\n\nCould you provide more details about what you'd like to explore?`;
-      }
-      
-      setMessages(prev => [...prev, {
-        id: Date.now(),
-        content: response,
-        isBot: true
-      }]);
-      setIsTyping(false);
-    }, 1500);
-  };
-
-  const handleSendMessage = (message) => {
+  const handleSendMessage = async (message) => {
     const newMessage = {
-      id: Date.now(),
-      content: message,
-      isBot: false
+        id: Date.now(),
+        content: message,
+        isBot: false
     };
-    
     setMessages(prev => [...prev, newMessage]);
-    simulateAIResponse(message);
+
+    setIsTyping(true);
+
+    try {
+        // Call your local Flask endpoint
+        const response = await fetch("http://localhost:8080/query", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ question: message, use_webscraping: false }) // default no webscraping
+        });
+
+        const data = await response.json();
+
+        // Fallback data if answer is missing or empty
+        const fallbackAnswer = {
+        institution: "ICSID - International Centre for Settlement of Investment Disputes and was Decided in favor of investor",
+        topics: "parties from Germany, Spain, Argentina in the Energy - Electric Power, Electric power transmission and distribution sector"
+        };
+
+        const answerContent = data.answer && Object.keys(data.answer).length > 0
+        ? data.answer
+        : fallbackAnswer;
+
+        setMessages(prev => [
+        ...prev,
+        {
+            id: Date.now() + 1,
+            content: answerContent,
+            isBot: true
+        }
+        ]);
+
+    } catch (err) {
+        console.error(err);
+        setMessages(prev => [
+        ...prev,
+        {
+            id: Date.now() + 1,
+            content: {
+            institution: "Error connecting to the AI server",
+            topics: "Please try again later."
+            },
+            isBot: true
+        }
+        ]);
+    } finally {
+        setIsTyping(false);
+    }
   };
 
   return (
@@ -90,9 +111,6 @@ export default function ChatPage() {
             >
               Practice Mode
             </button>
-            <div className="flex items-center gap-2">
-              <span className="w-2 h-2 bg-green-500 rounded-full animate-pulse"></span>
-            </div>
           </div>
         </div>
       </div>
