@@ -1,3 +1,6 @@
 case_data_clean/*
 case_data_raw/*
 arbitration_fine_tuning.jsonl
+.env
+.env.local
+model/*
